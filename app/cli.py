@@ -76,6 +76,64 @@ def command_compute_demo() -> int:
     return 0 if task.status_code == 202 and claimed.status_code == 200 and claimed.json().get("task") else 1
 
 
+def command_events_demo() -> int:
+    credentials = {"username": "events-demo-admin", "password": "Events!23456", "client_label": "cli-events-demo"}
+    with TestClient(app) as client:
+        bootstrap = client.post("/api/auth/bootstrap", json=credentials)
+        if bootstrap.status_code not in {201, 409}:
+            print(bootstrap.text)
+            return 1
+        login = client.post("/api/auth/login", json=credentials)
+        if login.status_code != 200:
+            print(login.text)
+            return 1
+        headers = {"Authorization": f"Bearer {login.json()['token']}"}
+        for body in (
+            {"object_type": "satellite", "object_key": "SAT-DEMO-1", "display_name": "演示卫星一号"},
+            {"object_type": "mission", "object_key": "MIS-DEMO", "display_name": "演示任务"},
+        ):
+            client.put("/api/events/objects/catalog", json=body, headers=headers)
+        field = client.post(
+            "/api/events/fields/registry",
+            json={"field_key": "thermal.limit_celsius", "value_type": "number", "applies_to": ["thermal_derating"]},
+            headers=headers,
+        )
+        if field.status_code not in {201, 409}:
+            print(field.text)
+            return 1
+        ingested = client.post(
+            "/api/events",
+            json={
+                "source": "ttc-gateway",
+                "external_id": "events-demo-000001",
+                "event_type": "thermal_derating",
+                "severity": "warning",
+                "occurred_at": "2026-09-27T08:30:00Z",
+                "summary": "载荷温度接近阈值，触发热降额",
+                "satellite": "SAT-DEMO-1",
+                "mission": "MIS-DEMO",
+                "correlation_key": "demo-anomaly-001",
+                "attributes": {"thermal.limit_celsius": 85.5},
+            },
+            headers=headers,
+        )
+        if ingested.status_code not in {200, 201}:
+            print(ingested.text)
+            return 1
+        event_id = ingested.json()["event"]["id"]
+        ack = client.post(f"/api/events/{event_id}/acknowledge", json={"reason": "值班确认"}, headers=headers)
+        summary = client.get("/api/events/summary/satellite", headers=headers)
+        replay = client.get("/api/events/replay/from/0?limit=10", headers=headers)
+    result = {
+        "event_id": event_id,
+        "acknowledged": ack.status_code in {200, 409},
+        "summary_groups": len(summary.json()["groups"]),
+        "replayed": len(replay.json()["items"]),
+    }
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["acknowledged"] and result["summary_groups"] >= 1 and result["replayed"] >= 1 else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="compute-operations", description="科学计算任务运营服务维护入口")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -83,8 +141,15 @@ def main() -> int:
     subparsers.add_parser("check-db", help="检查数据库完整性")
     subparsers.add_parser("smoke", help="执行本地 API 冒烟检查")
     subparsers.add_parser("compute-demo", help="执行计算任务提交与领取演示")
+    subparsers.add_parser("events-demo", help="执行地面运营事件中心演示")
     args = parser.parse_args()
-    return {"init-db": command_init, "check-db": command_check, "smoke": command_smoke, "compute-demo": command_compute_demo}[args.command]()
+    return {
+        "init-db": command_init,
+        "check-db": command_check,
+        "smoke": command_smoke,
+        "compute-demo": command_compute_demo,
+        "events-demo": command_events_demo,
+    }[args.command]()
 
 
 if __name__ == "__main__":
