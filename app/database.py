@@ -311,6 +311,10 @@ PERMISSIONS = [
     ("announcements.write", "维护公告", "announcements", "write"),
     ("audit.read", "查看审计", "audit", "read"),
     ("jobs.run", "执行后台任务", "jobs", "run"),
+    ("events.read", "查看运营事件", "events", "read"),
+    ("events.write", "接入与关联运营事件", "events", "write"),
+    ("events.lifecycle", "处置运营事件", "events", "lifecycle"),
+    ("events.manage", "更正删除与归档运营事件", "events", "manage"),
 ]
 
 

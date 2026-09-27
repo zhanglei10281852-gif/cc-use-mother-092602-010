@@ -12,6 +12,8 @@ from app.routers import affairs, announcements, departments, petitions, resident
 from app.seismic.router import router as seismic_router
 from app.seismic.service import ensure_schema as ensure_seismic_schema
 from app.compute.router import router as compute_router
+from app.events.router import router as events_router
+from app.events.service import EventCenterService
 
 
 @asynccontextmanager
@@ -19,6 +21,7 @@ async def lifespan(app: FastAPI):
     del app
     init_db()
     ensure_seismic_schema()
+    EventCenterService().init_builtins()
     yield
     close_connection()
 
@@ -51,6 +54,7 @@ app.include_router(departments.router)
 app.include_router(petitions.router)
 app.include_router(seismic_router)
 app.include_router(compute_router)
+app.include_router(events_router)
 
 
 @app.get("/")
